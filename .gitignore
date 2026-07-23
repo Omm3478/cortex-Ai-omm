@@ -56,7 +56,7 @@ Thumbs.db
 # =========================
 # Firebase
 # =========================
-serviceAccountKey.json
+
 firebase-adminsdk*.json
 serviceAccount.json
 
