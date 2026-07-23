@@ -58,7 +58,7 @@ Thumbs.db
 # =========================
 serviceAccountKey.json
 firebase-adminsdk*.json
-backend/services/auth/serviceAccount.json
+serviceAccount.json
 
 # =========================
 # Docker
