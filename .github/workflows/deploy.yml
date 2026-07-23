@@ -143,9 +143,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4 
 
-      - name: build frontend
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL }}
         run: | 
-          cd frontend
           npm install
           npm run build        
 
