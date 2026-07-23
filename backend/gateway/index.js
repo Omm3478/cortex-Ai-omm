@@ -33,7 +33,7 @@ app.use("/api/billing",protect,proxyWithUser(process.env.BILLING_SERVICE))
 
 app.get("/", (req, res) => {
   res.status(200).json({
-    service: "gateway",
+    service: "gateway!",
     status: "ok"
   });
 });
