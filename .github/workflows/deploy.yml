@@ -41,8 +41,14 @@ jobs:
           docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/gateway:latest  
 
       - name: Create Firebase service account
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > backend/services/auth/serviceAccount.json
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > backend/services/auth/serviceAccount.json
+
+      - name: Validate Firebase service account
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('backend/services/auth/serviceAccount.json', 'utf8')); console.log('Firebase JSON is valid')"
 
 
       - name: Build Auth 
