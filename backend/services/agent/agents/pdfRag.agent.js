@@ -1,29 +1,64 @@
 import fs from "fs";
-import {PDFParse} from "pdf-parse";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { createVectorStore } from "../utils/vectorStore.js";
+import { PDFParse } from "pdf-parse";
+
+import {
+  RecursiveCharacterTextSplitter
+} from "@langchain/textsplitters";
+
+import {
+  createVectorStore
+} from "../utils/vectorStore.js";
+
 import {
   HumanMessage,
   SystemMessage
 } from "@langchain/core/messages";
 
-import { getModel }
-from "../utils/model.js";
-import { QdrantVectorStore } from "@langchain/qdrant";
+import {
+  getModel
+} from "../utils/model.js";
+
+import {
+  QdrantVectorStore
+} from "@langchain/qdrant";
+
+
 export const pdfRagAgent = async (state) => {
 
+  let collectionName;
+
   try {
+
+    // =========================
+    // STEP 1: READ PDF
+    // =========================
+
+    console.log(
+      "PDF STEP 1: Reading PDF"
+    );
 
     const buffer =
       fs.readFileSync(
         state.file.path
       );
 
+    console.log(
+      "PDF SIZE:",
+      buffer.length
+    );
+
+
+    // =========================
+    // STEP 2: EXTRACT TEXT
+    // =========================
+
+    console.log(
+      "PDF STEP 2: Extracting text"
+    );
+
     const pdf =
       new PDFParse({
-
         data: buffer
-
       });
 
     const result =
@@ -31,6 +66,20 @@ export const pdfRagAgent = async (state) => {
 
     const text =
       result.text;
+
+    console.log(
+      "PDF TEXT LENGTH:",
+      text.length
+    );
+
+
+    // =========================
+    // STEP 3: SPLIT DOCUMENT
+    // =========================
+
+    console.log(
+      "PDF STEP 3: Splitting document"
+    );
 
     const splitter =
       new RecursiveCharacterTextSplitter({
@@ -43,51 +92,102 @@ export const pdfRagAgent = async (state) => {
 
     const docs =
       await splitter.createDocuments([
-
         text
-
       ]);
 
-   const collectionName =
-`pdf-${Date.now()}`;
+    console.log(
+      "DOCUMENT CHUNKS:",
+      docs.length
+    );
 
-const vectorStore =await createVectorStore(
 
-collectionName,
+    // =========================
+    // STEP 4: CREATE COLLECTION
+    // =========================
 
-docs
+    collectionName =
+      `pdf-${Date.now()}`;
 
-);
+    console.log(
+      "PDF STEP 4: Creating vector store"
+    );
 
-const relevantDocs =
-await vectorStore.similaritySearch(
+    console.log(
+      "COLLECTION:",
+      collectionName
+    );
 
-    state.prompt,
+    const vectorStore =
+      await createVectorStore(
+        collectionName,
+        docs
+      );
 
-    5
+    console.log(
+      "PDF STEP 5: Vector store created"
+    );
 
-);
-console.log(relevantDocs);
-const context =
-relevantDocs
 
-.map(doc=>doc.pageContent)
+    // =========================
+    // STEP 5: SIMILARITY SEARCH
+    // =========================
 
-.join("\n\n");
-const llm =getModel("pdf-rag");
+    console.log(
+      "PDF STEP 6: Searching PDF"
+    );
 
-    const messages=[
+    const relevantDocs =
+      await vectorStore.similaritySearch(
+        state.prompt,
+        5
+      );
 
-new SystemMessage(`
+    console.log(
+      "RELEVANT DOCS:",
+      relevantDocs.length
+    );
+
+
+    // =========================
+    // STEP 6: BUILD CONTEXT
+    // =========================
+
+    const context =
+      relevantDocs
+        .map(
+          doc => doc.pageContent
+        )
+        .join("\n\n");
+
+
+    console.log(
+      "CONTEXT LENGTH:",
+      context.length
+    );
+
+
+    // =========================
+    // STEP 7: CALL LLM
+    // =========================
+
+    console.log(
+      "PDF STEP 7: Calling PDF RAG model"
+    );
+
+    const llm =
+      getModel("pdf-rag");
+
+
+    const messages = [
+
+      new SystemMessage(`
 
 You are CortexAI PDF Assistant.
 
 Rules:
 
 - Answer ONLY from the uploaded PDF.
-
 - Never make up information.
-
 - If the answer is not present in the PDF, reply:
 
 "I couldn't find this information in the uploaded PDF."
@@ -96,7 +196,7 @@ Rules:
 
 `),
 
-new HumanMessage(`
+      new HumanMessage(`
 
 Context:
 
@@ -107,14 +207,24 @@ Question:
 ${state.prompt}
 
 `)
-];
+
+    ];
 
 
-const response =
-await llm.invoke(
-    messages
-);
+    const response =
+      await llm.invoke(
+        messages
+      );
 
+
+    console.log(
+      "PDF STEP 8: LLM response received"
+    );
+
+
+    // =========================
+    // RETURN RESULT
+    // =========================
 
     return {
 
@@ -123,37 +233,80 @@ await llm.invoke(
       docs,
 
       response:
-response.content
+        response.content
+
     };
 
-    
+
+  } catch (error) {
+
+    console.error(
+      "========== PDF RAG ERROR =========="
+    );
+
+    console.error(
+      error
+    );
+
+    console.error(
+      "===================================="
+    );
+
+    throw error;
 
 
+  } finally {
 
-  }
+    // =========================
+    // CLEANUP
+    // =========================
 
- finally{
+    try {
 
-    try{
+      if (
+        state.file?.path &&
+        fs.existsSync(
+          state.file.path
+        )
+      ) {
 
         fs.unlinkSync(
-            state.file.path
+          state.file.path
+        );
+
+        console.log(
+          "Temporary PDF deleted"
+        );
+
+      }
+
+
+      if (collectionName) {
+
+        console.log(
+          "Deleting Qdrant collection:",
+          collectionName
         );
 
         await QdrantVectorStore.deleteCollection(
-
-            collectionName
-
+          collectionName
         );
 
+        console.log(
+          "Qdrant collection deleted"
+        );
+
+      }
+
+    } catch (err) {
+
+      console.error(
+        "Cleanup error:",
+        err.message
+      );
+
     }
 
-    catch(err){
-
-        console.log(err.message);
-
-    }
-
-}
+  }
 
 };
