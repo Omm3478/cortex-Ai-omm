@@ -1,39 +1,86 @@
-import fs, { stat } from "fs"
-import {PDFParse} from "pdf-parse"
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters"
-import { vectorStore } from "../config/vectorDb.js"
-import { getModel } from "../config/llmModels.js"
-import { HumanMessage, SystemMessage } from "@langchain/core/messages"
-import { deductCredits } from "../utils/deductCredits.js"
-import { checkAgentLimit } from "../config/agentLimit.js"
-export const pdfRag=async (state)=>{
-   try {
-    await checkAgentLimit(state.userId,"pdf")
-      const buffer=fs.readFileSync(state.file.path)
-      const pdf=new PDFParse({
-        data:buffer
-      })
+import fs from "fs";
+import {PDFParse} from "pdf-parse";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { createVectorStore } from "../utils/vectorStore.js";
+import {
+  HumanMessage,
+  SystemMessage
+} from "@langchain/core/messages";
 
-      const result=await pdf.getText()
-      const text=result.text
+import { getModel }
+from "../utils/model.js";
+import { QdrantVectorStore } from "@langchain/qdrant";
+export const pdfRagAgent = async (state) => {
 
-      const spilliter=new RecursiveCharacterTextSplitter({
-        chunkSize:1000,
-        chunkOverlap:200
-      })
+  try {
 
-      const docs=await spilliter.createDocuments([text])
-      const collectionName=`pdf-${Date.now()}`;
-      const store=await vectorStore(docs,collectionName)
+    const buffer =
+      fs.readFileSync(
+        state.file.path
+      );
 
-      const relevantDocs=await store.similaritySearch(state.prompt,5)
-      
-      const context=relevantDocs.map(d=>d.pageContent).join("\n\n")
-      
-      const llm=await getModel("pdf-rag")
+    const pdf =
+      new PDFParse({
 
-       const messages=[
-        new SystemMessage(`You are CortexAI PDF Assistant.
+        data: buffer
+
+      });
+
+    const result =
+      await pdf.getText();
+
+    const text =
+      result.text;
+
+    const splitter =
+      new RecursiveCharacterTextSplitter({
+
+        chunkSize: 1000,
+
+        chunkOverlap: 200
+
+      });
+
+    const docs =
+      await splitter.createDocuments([
+
+        text
+
+      ]);
+
+   const collectionName =
+`pdf-${Date.now()}`;
+
+const vectorStore =await createVectorStore(
+
+collectionName,
+
+docs
+
+);
+
+const relevantDocs =
+await vectorStore.similaritySearch(
+
+    state.prompt,
+
+    5
+
+);
+console.log(relevantDocs);
+const context =
+relevantDocs
+
+.map(doc=>doc.pageContent)
+
+.join("\n\n");
+const llm =getModel("pdf-rag");
+
+    const messages=[
+
+new SystemMessage(`
+
+You are CortexAI PDF Assistant.
 
 Rules:
 
@@ -46,34 +93,67 @@ Rules:
 "I couldn't find this information in the uploaded PDF."
 
 - Use Markdown formatting.
+
 `),
 
 new HumanMessage(`
-    Context:${context}
-     Question:${state.prompt}
-    `)
-       ]
+
+Context:
+
+${context}
+
+Question:
+
+${state.prompt}
+
+`)
+];
 
 
-      const response=await llm.invoke(messages)
-      await deductCredits(state.userId,"pdf")
-      console.log(response)
-      return {
-        ...state,
-        aiResponse:response.content
-      }
+const response =
+await llm.invoke(
+    messages
+);
+
+
+    return {
+
+      ...state,
+
+      docs,
+
+      response:
+response.content
+    };
+
+    
 
 
 
-   } catch (error) {
-    console.log(error)
-         return {
-            ...state,
-            aiResponse:error?.data?.message || "failed to analyze pdf"
-        }
-   }finally{
-         fs.unlinkSync(state.file.path)
-   }
+  }
 
+ finally{
+
+    try{
+
+        fs.unlinkSync(
+            state.file.path
+        );
+
+        await QdrantVectorStore.deleteCollection(
+
+            collectionName
+
+        );
+
+    }
+
+    catch(err){
+
+        console.log(err.message);
+
+    }
 
 }
+
+};
