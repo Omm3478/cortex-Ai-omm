@@ -1,4 +1,5 @@
 import fs from "fs";
+import crypto from "crypto";
 import { PDFParse } from "pdf-parse";
 
 import {
@@ -25,17 +26,101 @@ import {
 
 export const pdfRagAgent = async (state) => {
 
-  let collectionName;
+  // ==========================================
+  // DEBUG REQUEST ID
+  // ==========================================
+
+  const requestId =
+    crypto.randomUUID();
+
+  let collectionName = null;
+
+  console.log(
+    "\n\n=========================================="
+  );
+
+  console.log(
+    "🔥 PDF RAG AGENT STARTED"
+  );
+
+  console.log(
+    "REQUEST ID:",
+    requestId
+  );
+
+  console.log(
+    "=========================================="
+  );
+
 
   try {
 
-    // =========================
-    // STEP 1: READ PDF
-    // =========================
+    // ==========================================
+    // STEP 0: CHECK STATE
+    // ==========================================
 
     console.log(
-      "PDF STEP 1: Reading PDF"
+      `[${requestId}] STEP 0: Checking state`
     );
+
+    console.log(
+      `[${requestId}] Prompt:`,
+      state?.prompt
+    );
+
+    console.log(
+      `[${requestId}] Agent:`,
+      state?.agent
+    );
+
+    console.log(
+      `[${requestId}] File exists:`,
+      !!state?.file
+    );
+
+    if (!state?.file) {
+
+      throw new Error(
+        "PDF RAG ERROR: state.file is missing"
+      );
+
+    }
+
+    console.log(
+      `[${requestId}] File path:`,
+      state.file.path
+    );
+
+    console.log(
+      `[${requestId}] File mimetype:`,
+      state.file.mimetype
+    );
+
+    console.log(
+      `[${requestId}] File original name:`,
+      state.file.originalname
+    );
+
+
+    // ==========================================
+    // STEP 1: READ PDF
+    // ==========================================
+
+    console.log(
+      `\n[${requestId}] STEP 1: Reading PDF`
+    );
+
+    if (
+      !fs.existsSync(
+        state.file.path
+      )
+    ) {
+
+      throw new Error(
+        `PDF file does not exist: ${state.file.path}`
+      );
+
+    }
 
     const buffer =
       fs.readFileSync(
@@ -43,17 +128,22 @@ export const pdfRagAgent = async (state) => {
       );
 
     console.log(
-      "PDF SIZE:",
-      buffer.length
+      `[${requestId}] PDF SIZE:`,
+      buffer.length,
+      "bytes"
+    );
+
+    console.log(
+      `[${requestId}] STEP 1 SUCCESS`
     );
 
 
-    // =========================
-    // STEP 2: EXTRACT TEXT
-    // =========================
+    // ==========================================
+    // STEP 2: EXTRACT PDF TEXT
+    // ==========================================
 
     console.log(
-      "PDF STEP 2: Extracting text"
+      `\n[${requestId}] STEP 2: Extracting PDF text`
     );
 
     const pdf =
@@ -68,17 +158,32 @@ export const pdfRagAgent = async (state) => {
       result.text;
 
     console.log(
-      "PDF TEXT LENGTH:",
-      text.length
+      `[${requestId}] PDF TEXT LENGTH:`,
+      text?.length
+    );
+
+    if (
+      !text ||
+      text.trim().length === 0
+    ) {
+
+      throw new Error(
+        "PDF text extraction returned empty text. The PDF may be scanned/image-based."
+      );
+
+    }
+
+    console.log(
+      `[${requestId}] STEP 2 SUCCESS`
     );
 
 
-    // =========================
+    // ==========================================
     // STEP 3: SPLIT DOCUMENT
-    // =========================
+    // ==========================================
 
     console.log(
-      "PDF STEP 3: Splitting document"
+      `\n[${requestId}] STEP 3: Splitting document`
     );
 
     const splitter =
@@ -96,61 +201,191 @@ export const pdfRagAgent = async (state) => {
       ]);
 
     console.log(
-      "DOCUMENT CHUNKS:",
+      `[${requestId}] DOCUMENT CHUNKS:`,
       docs.length
     );
 
+    if (
+      !docs ||
+      docs.length === 0
+    ) {
 
-    // =========================
-    // STEP 4: CREATE COLLECTION
-    // =========================
+      throw new Error(
+        "Text splitter returned zero document chunks."
+      );
 
-    collectionName =
-      `pdf-${Date.now()}`;
+    }
 
     console.log(
-      "PDF STEP 4: Creating vector store"
+      `[${requestId}] STEP 3 SUCCESS`
+    );
+
+
+    // ==========================================
+    // STEP 4: CREATE UNIQUE QDRANT COLLECTION
+    // ==========================================
+
+    collectionName =
+      `pdf-${Date.now()}-${requestId.slice(0, 8)}`;
+
+    console.log(
+      `\n[${requestId}] STEP 4: Creating vector store`
     );
 
     console.log(
-      "COLLECTION:",
+      `[${requestId}] COLLECTION:`,
       collectionName
     );
 
-    const vectorStore =
-      await createVectorStore(
-        collectionName,
-        docs
+    console.log(
+      `[${requestId}] QDRANT_URL exists:`,
+      !!process.env.QDRANT_URL
+    );
+
+    console.log(
+      `[${requestId}] QDRANT_API_KEY exists:`,
+      !!process.env.QDRANT_API_KEY
+    );
+
+    console.log(
+      `[${requestId}] GOOGLE_API_KEY exists:`,
+      !!process.env.GOOGLE_API_KEY
+    );
+
+
+    // ==========================================
+    // CREATE VECTOR STORE
+    // ==========================================
+
+    let vectorStore;
+
+    try {
+
+      console.log(
+        `[${requestId}] Calling createVectorStore()`
       );
 
-    console.log(
-      "PDF STEP 5: Vector store created"
-    );
+      vectorStore =
+        await createVectorStore(
+          collectionName,
+          docs
+        );
 
-
-    // =========================
-    // STEP 5: SIMILARITY SEARCH
-    // =========================
-
-    console.log(
-      "PDF STEP 6: Searching PDF"
-    );
-
-    const relevantDocs =
-      await vectorStore.similaritySearch(
-        state.prompt,
-        5
+      console.log(
+        `[${requestId}] STEP 4 SUCCESS: Vector store created`
       );
 
+    } catch (error) {
+
+      console.error(
+        `\n[${requestId}] ❌ VECTOR STORE ERROR`
+      );
+
+      console.error(
+        `[${requestId}] Error name:`,
+        error?.name
+      );
+
+      console.error(
+        `[${requestId}] Error message:`,
+        error?.message
+      );
+
+      console.error(
+        `[${requestId}] Error code:`,
+        error?.code
+      );
+
+      console.error(
+        `[${requestId}] Error cause:`,
+        error?.cause
+      );
+
+      console.error(
+        `[${requestId}] Full error:`,
+        error
+      );
+
+      throw error;
+
+    }
+
+
+    // ==========================================
+    // STEP 5: QDRANT SIMILARITY SEARCH
+    // ==========================================
+
     console.log(
-      "RELEVANT DOCS:",
-      relevantDocs.length
+      `\n[${requestId}] STEP 5: Starting similarity search`
     );
 
+    console.log(
+      `[${requestId}] Query:`,
+      state.prompt
+    );
 
-    // =========================
+    let relevantDocs;
+
+    try {
+
+      relevantDocs =
+        await vectorStore.similaritySearch(
+          state.prompt,
+          5
+        );
+
+      console.log(
+        `[${requestId}] SIMILARITY SEARCH SUCCESS`
+      );
+
+      console.log(
+        `[${requestId}] Relevant documents:`,
+        relevantDocs.length
+      );
+
+    } catch (error) {
+
+      console.error(
+        `\n[${requestId}] ❌ SIMILARITY SEARCH ERROR`
+      );
+
+      console.error(
+        `[${requestId}] Error name:`,
+        error?.name
+      );
+
+      console.error(
+        `[${requestId}] Error message:`,
+        error?.message
+      );
+
+      console.error(
+        `[${requestId}] Error code:`,
+        error?.code
+      );
+
+      console.error(
+        `[${requestId}] Error cause:`,
+        error?.cause
+      );
+
+      console.error(
+        `[${requestId}] Full error:`,
+        error
+      );
+
+      throw error;
+
+    }
+
+
+    // ==========================================
     // STEP 6: BUILD CONTEXT
-    // =========================
+    // ==========================================
+
+    console.log(
+      `\n[${requestId}] STEP 6: Building context`
+    );
 
     const context =
       relevantDocs
@@ -159,24 +394,70 @@ export const pdfRagAgent = async (state) => {
         )
         .join("\n\n");
 
-
     console.log(
-      "CONTEXT LENGTH:",
+      `[${requestId}] CONTEXT LENGTH:`,
       context.length
     );
 
-
-    // =========================
-    // STEP 7: CALL LLM
-    // =========================
-
     console.log(
-      "PDF STEP 7: Calling PDF RAG model"
+      `[${requestId}] STEP 6 SUCCESS`
     );
 
-    const llm =
-      getModel("pdf-rag");
 
+    // ==========================================
+    // STEP 7: GET PDF RAG MODEL
+    // ==========================================
+
+    console.log(
+      `\n[${requestId}] STEP 7: Getting PDF RAG model`
+    );
+
+    let llm;
+
+    try {
+
+      llm =
+        getModel(
+          "pdf-rag"
+        );
+
+      console.log(
+        `[${requestId}] PDF RAG MODEL CREATED`
+      );
+
+    } catch (error) {
+
+      console.error(
+        `\n[${requestId}] ❌ MODEL CREATION ERROR`
+      );
+
+      console.error(
+        `[${requestId}] Error name:`,
+        error?.name
+      );
+
+      console.error(
+        `[${requestId}] Error message:`,
+        error?.message
+      );
+
+      console.error(
+        `[${requestId}] Full error:`,
+        error
+      );
+
+      throw error;
+
+    }
+
+
+    // ==========================================
+    // STEP 8: CALL PDF RAG LLM
+    // ==========================================
+
+    console.log(
+      `\n[${requestId}] STEP 8: Calling PDF RAG LLM`
+    );
 
     const messages = [
 
@@ -211,20 +492,76 @@ ${state.prompt}
     ];
 
 
-    const response =
-      await llm.invoke(
-        messages
+    let response;
+
+    try {
+
+      response =
+        await llm.invoke(
+          messages
+        );
+
+      console.log(
+        `[${requestId}] STEP 8 SUCCESS: LLM response received`
       );
 
+      console.log(
+        `[${requestId}] Response length:`,
+        response?.content?.length
+      );
+
+    } catch (error) {
+
+      console.error(
+        `\n[${requestId}] ❌ LLM FETCH ERROR`
+      );
+
+      console.error(
+        `[${requestId}] Error name:`,
+        error?.name
+      );
+
+      console.error(
+        `[${requestId}] Error message:`,
+        error?.message
+      );
+
+      console.error(
+        `[${requestId}] Error code:`,
+        error?.code
+      );
+
+      console.error(
+        `[${requestId}] Error cause:`,
+        error?.cause
+      );
+
+      console.error(
+        `[${requestId}] Full error:`,
+        error
+      );
+
+      throw error;
+
+    }
+
+
+    // ==========================================
+    // STEP 9: SUCCESS
+    // ==========================================
 
     console.log(
-      "PDF STEP 8: LLM response received"
+      `\n[${requestId}] ==========================================`
     );
 
+    console.log(
+      `[${requestId}] 🎉 PDF RAG COMPLETED SUCCESSFULLY`
+    );
 
-    // =========================
-    // RETURN RESULT
-    // =========================
+    console.log(
+      `[${requestId}] ==========================================`
+    );
+
 
     return {
 
@@ -240,16 +577,50 @@ ${state.prompt}
 
   } catch (error) {
 
+
+    // ==========================================
+    // MAIN ERROR
+    // ==========================================
+
     console.error(
-      "========== PDF RAG ERROR =========="
+      `\n\n==========================================`
     );
 
     console.error(
+      `🔥 PDF RAG FINAL ERROR`
+    );
+
+    console.error(
+      `REQUEST ID: ${requestId}`
+    );
+
+    console.error(
+      `ERROR NAME:`,
+      error?.name
+    );
+
+    console.error(
+      `ERROR MESSAGE:`,
+      error?.message
+    );
+
+    console.error(
+      `ERROR CODE:`,
+      error?.code
+    );
+
+    console.error(
+      `ERROR CAUSE:`,
+      error?.cause
+    );
+
+    console.error(
+      `FULL ERROR:`,
       error
     );
 
     console.error(
-      "===================================="
+      `==========================================\n\n`
     );
 
     throw error;
@@ -257,9 +628,19 @@ ${state.prompt}
 
   } finally {
 
-    // =========================
+
+    // ==========================================
     // CLEANUP
-    // =========================
+    // ==========================================
+
+    console.log(
+      `\n[${requestId}] STARTING CLEANUP`
+    );
+
+
+    // ------------------------------------------
+    // DELETE TEMPORARY PDF
+    // ------------------------------------------
 
     try {
 
@@ -275,25 +656,13 @@ ${state.prompt}
         );
 
         console.log(
-          "Temporary PDF deleted"
+          `[${requestId}] Temporary PDF deleted`
         );
 
-      }
-
-
-      if (collectionName) {
+      } else {
 
         console.log(
-          "Deleting Qdrant collection:",
-          collectionName
-        );
-
-        await QdrantVectorStore.deleteCollection(
-          collectionName
-        );
-
-        console.log(
-          "Qdrant collection deleted"
+          `[${requestId}] Temporary PDF already missing`
         );
 
       }
@@ -301,11 +670,78 @@ ${state.prompt}
     } catch (err) {
 
       console.error(
-        "Cleanup error:",
-        err.message
+        `[${requestId}] ❌ PDF cleanup failed`
+      );
+
+      console.error(
+        `[${requestId}] Cleanup error:`,
+        err
       );
 
     }
+
+
+    // ------------------------------------------
+    // DELETE QDRANT COLLECTION
+    // ------------------------------------------
+
+    if (
+      collectionName
+    ) {
+
+      console.log(
+        `[${requestId}] Qdrant collection cleanup:`,
+        collectionName
+      );
+
+      try {
+
+        await QdrantVectorStore.deleteCollection(
+          collectionName
+        );
+
+        console.log(
+          `[${requestId}] Qdrant collection deleted`
+        );
+
+      } catch (err) {
+
+        console.error(
+          `[${requestId}] ❌ Qdrant cleanup failed`
+        );
+
+        console.error(
+          `[${requestId}] Cleanup error name:`,
+          err?.name
+        );
+
+        console.error(
+          `[${requestId}] Cleanup error message:`,
+          err?.message
+        );
+
+        console.error(
+          `[${requestId}] Cleanup error cause:`,
+          err?.cause
+        );
+
+        console.error(
+          `[${requestId}] Full cleanup error:`,
+          err
+        );
+
+      }
+
+    }
+
+
+    console.log(
+      `[${requestId}] CLEANUP FINISHED`
+    );
+
+    console.log(
+      `==========================================\n`
+    );
 
   }
 

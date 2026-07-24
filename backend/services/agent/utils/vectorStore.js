@@ -1,12 +1,30 @@
-import { QdrantVectorStore } from "@langchain/qdrant";
-import { embeddings } from "./embedding.js";
+import {
+  QdrantVectorStore
+} from "@langchain/qdrant";
+
+import {
+  embeddings
+} from "./embedding.js";
+
 
 export const createVectorStore = async (
   collectionName,
   docs
 ) => {
 
-  console.log("========== VECTOR STORE START ==========");
+  console.log(
+    "\n========== VECTOR STORE DEBUG START =========="
+  );
+
+  console.log(
+    "Collection:",
+    collectionName
+  );
+
+  console.log(
+    "Documents:",
+    docs.length
+  );
 
   console.log(
     "GOOGLE_API_KEY exists:",
@@ -23,12 +41,13 @@ export const createVectorStore = async (
     !!process.env.QDRANT_API_KEY
   );
 
-  // --------------------------------
+
+  // ==========================================
   // TEST GOOGLE EMBEDDINGS
-  // --------------------------------
+  // ==========================================
 
   console.log(
-    "1. Testing Google Embeddings..."
+    "\n🔵 EMBEDDING TEST START"
   );
 
   try {
@@ -39,7 +58,7 @@ export const createVectorStore = async (
       );
 
     console.log(
-      "2. Google Embeddings SUCCESS"
+      "🟢 EMBEDDING TEST SUCCESS"
     );
 
     console.log(
@@ -50,10 +69,31 @@ export const createVectorStore = async (
   } catch (error) {
 
     console.error(
-      "❌ Google Embeddings FAILED"
+      "🔴 EMBEDDING TEST FAILED"
     );
 
     console.error(
+      "Error name:",
+      error?.name
+    );
+
+    console.error(
+      "Error message:",
+      error?.message
+    );
+
+    console.error(
+      "Error code:",
+      error?.code
+    );
+
+    console.error(
+      "Error cause:",
+      error?.cause
+    );
+
+    console.error(
+      "FULL EMBEDDING ERROR:",
       error
     );
 
@@ -61,12 +101,13 @@ export const createVectorStore = async (
 
   }
 
-  // --------------------------------
+
+  // ==========================================
   // TEST QDRANT
-  // --------------------------------
+  // ==========================================
 
   console.log(
-    "3. Creating Qdrant Vector Store..."
+    "\n🟣 QDRANT VECTOR STORE TEST START"
   );
 
   try {
@@ -76,6 +117,7 @@ export const createVectorStore = async (
         docs,
         embeddings,
         {
+
           url:
             process.env.QDRANT_URL,
 
@@ -83,11 +125,16 @@ export const createVectorStore = async (
             process.env.QDRANT_API_KEY,
 
           collectionName
+
         }
       );
 
     console.log(
-      "4. Qdrant Vector Store SUCCESS"
+      "🟢 QDRANT VECTOR STORE SUCCESS"
+    );
+
+    console.log(
+      "========== VECTOR STORE DEBUG END ==========\n"
     );
 
     return vectorStore;
@@ -95,10 +142,31 @@ export const createVectorStore = async (
   } catch (error) {
 
     console.error(
-      "❌ Qdrant Vector Store FAILED"
+      "🔴 QDRANT VECTOR STORE FAILED"
     );
 
     console.error(
+      "Error name:",
+      error?.name
+    );
+
+    console.error(
+      "Error message:",
+      error?.message
+    );
+
+    console.error(
+      "Error code:",
+      error?.code
+    );
+
+    console.error(
+      "Error cause:",
+      error?.cause
+    );
+
+    console.error(
+      "FULL QDRANT ERROR:",
       error
     );
 
